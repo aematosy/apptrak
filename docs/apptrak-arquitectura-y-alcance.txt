@@ -1,0 +1,465 @@
+================================================================================
+APPTRAK
+Explorador autonomo de apps moviles
+Arquitectura y alcance
+Version del documento: 1.0  |  Fecha: 2026-10-23
+Basado en: sdd-exploracion-autonoma.md (rev. 3) + analisis de viabilidad
+================================================================================
+
+
+1. QUE ES APPTRAK
+--------------------------------------------------------------------------------
+Apptrak es un programa de linea de comandos (CLI + biblioteca) que recorre una
+app movil (Android primero, iOS despues) por si solo, sin que nadie la opere,
+y produce un CATALOGO versionado con:
+
+  - Las pantallas que encontro.
+  - Los elementos de cada pantalla, con su mejor locator ordenado por calidad.
+  - Las transiciones entre pantallas (grafo de navegacion).
+  - Los textos visibles de cada pantalla, base para aserciones.
+
+El catalogo es un insumo para automatizar pruebas: quien escriba (o genere con
+IA) la automatizacion consulta ahi locators estables, nombres de pantalla y
+textos.
+
+Apptrak NO es una app movil ni una app web. Corre en una computadora o en CI y
+controla el dispositivo desde afuera a traves de Appium.
+
+    PC / CI:  apptrak (CLI)  -->  Appium  -->  dispositivo / emulador / simulador
+
+
+2. PROBLEMA QUE RESUELVE
+--------------------------------------------------------------------------------
+La forma habitual de obtener locators es grabar a una persona operando la app.
+Limites de esa forma:
+
+  1. Solo conoce los elementos que se tocaron (1 de 40 en una pantalla).
+  2. Un xpath por indice es inestable entre estados y no se puede medir con
+     una sola captura.
+  3. Lo que solo se observa (un mensaje en pantalla) no deja evidencia.
+  4. Cada flujo exige a una persona frente al dispositivo.
+
+Con Apptrak:
+  - Existen locators de todos los elementos visibles de las pantallas alcanzadas.
+  - Se mide la unicidad de cada locator y su consistencia entre visitas.
+  - Cada pantalla guarda sus textos visibles (estaticos o dinamicos).
+  - Se lista cuantos elementos no tienen id: evidencia para pedirlos a desarrollo.
+  - El catalogo es el inventario contra el que se mide la cobertura.
+  - Comparando catalogos de dos versiones se ve que cambio y que flujos
+    automatizados quedan afectados.
+
+
+3. ALCANCE
+--------------------------------------------------------------------------------
+3.1 DENTRO DEL ALCANCE
+
+  - Exploracion autonoma y determinista (basada en reglas) de una app de pruebas.
+  - Catalogo: pantallas, elementos, locators, transiciones, textos.
+  - Huella estructural de pantalla (identidad) con variantes.
+  - Calidad de locators: estable / ancla / fragil, con unicidad y consistencia.
+  - Entradas por archivo: exploracion.json, datos.json, precondicion.
+  - Politica de continuidad (que no tocar para no perder la sesion).
+  - Porcentaje de avance en consola y en progreso.json.
+  - Checkpoint y reanudacion de corridas interrumpidas.
+  - Informes: catalogo.md, grafo.mmd (Mermaid), informe.md, revision.json.
+  - Comparacion de catalogos entre versiones y entre plataformas.
+  - Consulta del catalogo por CLI.
+  - Mantenimiento ante cambios de UI: impacto sobre flujos y parche de locators.
+  - IA opcional: nombrar pantallas y completar datos faltantes.
+  - Android primero; iOS en fase posterior.
+
+3.2 FUERA DEL ALCANCE
+
+  - Generar casos de prueba o escenarios de negocio (no sabe que flujo importa).
+  - Decidir si la app funciona bien (no es detector de defectos).
+  - Correr contra produccion o con cuentas reales.
+  - Reemplazar la grabacion de flujos con intencion (login > transferir > confirmar).
+  - Exploracion dirigida por IA / objetivos.
+  - Uso de MCP (no hay agente en el bucle; se evita costo y falta de repetibilidad).
+  - Interfaz grafica (solo como comentario futuro: visor web local o extension
+    de VS Code que lea progreso.json y escriba revision.json).
+  - Cambios a cualquier herramienta de generacion de codigo que consuma el catalogo.
+
+3.3 DONDE NO SUMA VALOR (limites conocidos)
+
+  - Pantallas detras de condiciones (saldo minimo, producto contratado, OTP).
+  - Elementos sin id: se listan con calidad "fragil", no se arreglan.
+  - Un catalogo de 300 pantallas es un inventario, no un plan de pruebas.
+  - El costo es tiempo de dispositivo (en granja se paga por minuto).
+
+
+4. REQUISITOS
+--------------------------------------------------------------------------------
+  R1  Sin intervencion humana durante la corrida. Los datos salen de datos.json;
+      el estado de partida (login) sale de la precondicion.
+  R2  Continuidad: puede tocar y borrar datos de la app de pruebas, pero no sale
+      de la app ni ejecuta lo que le impida seguir explorando.
+  R3  Repetible: dos corridas sobre la misma version y el mismo estado inicial
+      dan casi el mismo conjunto de pantallas.
+  R4  No necesita IA ni MCP. La IA es un complemento configurable.
+  R5  Nunca inventa locators: todo lo del catalogo se leyo del arbol de UI.
+  R6  Nunca guarda el valor de un campo sensible (contrasenas).
+  R7  Reanudable: una corrida interrumpida continua donde quedo.
+  R8  Independiente de cualquier editor: CLI, programable en CI.
+  R9  Informa su avance en porcentaje, en consola y en archivo.
+  R10 Android y iOS, con Android primero.
+
+Nota de consistencia: R2 (puede borrar datos) y R3 (repetible) solo son
+compatibles si SIEMPRE hay una precondicion de tipo "comando" que restaura el
+entorno. Se recomienda tratarlo como requisito, no como sugerencia.
+
+
+5. ARQUITECTURA
+--------------------------------------------------------------------------------
+5.1 VISTA GENERAL
+
+    1. Preparar            2. Explorar             3. Catalogo
+    exploracion.json  -->  bucle autonomo   -->    pantallas, elementos,
+    datos.json                  |                  transiciones
+                                |                        |
+                                +--> progreso.json       v
+                                                   4. Revisar (opcional)
+                                                          |
+                                                          v
+                                                   5. Usar el catalogo
+
+5.2 COMPONENTES
+
+    CLI --> Motor --> Driver (Appium) --> Dispositivo
+              |
+              +-- Normalizador de arbol de UI (Android / iOS)
+              +-- Huella de pantalla
+              +-- Frontera de acciones
+              +-- Calidad de locators
+              +-- Politica de continuidad
+              +-- Proveedor de datos (datos.json)
+              +-- Almacen de catalogo (archivos + checkpoint)
+              +-- Proveedor de IA (opcional)
+
+5.3 MODULOS (carpeta src/)
+
+  driver/        Envuelve Appium: sesion, getPageSource, tocar, escribir,
+                 desplazar, atras, activateApp, tamano de ventana.
+  normalizador/  Convierte el page source de cada plataforma al nodo normalizado
+                 y calcula el contexto (ancestros, descendientes, etiqueta cercana).
+  huella/        Tokens estructurales, similitud de Jaccard, variantes.
+  frontera/      Acciones candidatas y orden de prueba.
+  calidad/       Unicidad, calidad y consistencia de locators.
+  politica/      Perimetro de la app y exclusiones por continuidad.
+  datos/         Lee datos.json y resuelve cada campo.
+  motor/         El bucle de exploracion y la recuperacion.
+  almacen/       Escribe catalogo, checkpoint y progreso; aplica revision.json.
+  informe/       catalogo.md, grafo.mmd, informe.md.
+  comparador/    Equivalencia de pantallas y emparejamiento de elementos entre
+                 dos catalogos.
+  impacto/       Cruza el resultado del comparador con usos.json; produce
+                 informe-cambios.md, impacto.json y parche-locators.json.
+  ia/            Interfaz ProveedorIA (nombrarPantalla, proponerDato).
+  config/        Esquemas zod y carga de exploracion.json.
+
+  Funciones puras sobre datos (se prueban con arboles XML guardados, sin
+  dispositivo): normalizador, huella, frontera, calidad, politica, datos,
+  comparador, impacto.
+
+5.4 EL BUCLE DE EXPLORACION
+
+    Leer arbol de UI
+      -> Calcular huella
+      -> Pantalla conocida? (no: registrar | si: fusionar elementos)
+      -> Calcular frontera (acciones candidatas)
+      -> Queda accion permitida sin probar? (no: retroceder o terminar)
+      -> Ejecutar accion
+      -> Esperar a que la pantalla se estabilice
+      -> Clasificar resultado y registrar transicion
+      -> volver a leer
+
+5.5 MODELO DE NODO NORMALIZADO
+
+  indice, padre, clase, idEstable, descripcion, texto, bounds,
+  habilitado, visible, clickable, scrollable, enfocado,
+  esCampoTexto, sensible, paquete (solo Android).
+
+  Correspondencia:
+    idEstable    Android: resource-id     | iOS: name (si es distinto de label)
+    descripcion  Android: content-desc    | iOS: label
+    texto        Android: text            | iOS: value / label
+    clickable    Android: atributo real   | iOS: inferido del tipo
+    sensible     Android: password=true   | iOS: SecureTextField
+
+5.6 HUELLA DE PANTALLA (IDENTIDAD)
+
+  - Token de un nodo = clase | idEstable (o clase | descripcion si no hay id).
+    Nunca texto ni bounds.
+  - Se excluyen barras del sistema (com.android.systemui).
+  - Las listas se colapsan a un token para que 3 filas y 30 filas sean igual.
+  - Misma pantalla si Jaccard >= umbral (inicial 0,85; se calibra en E0).
+  - Si supera el umbral pero hay nodos nuevos: es una variante (dialogo,
+    teclado, seccion expandida).
+  - El id de pantalla es un hash corto de la primera lectura; NO es estable
+    entre corridas. Entre corridas se usa equivalencia, no igualdad de id.
+
+5.7 RESULTADO DE CADA ACCION
+
+  nueva | conocida | variante | sin-cambio | salio-de-app | bloqueada | error
+
+5.8 RETROCESO Y RECUPERACION
+
+  - Android: tecla BACK.
+  - iOS: boton de la NavigationBar, o relanzar la app y reproducir el camino.
+  - Salida de la app: activateApp; si el estado se perdio, ejecutar la
+    precondicion y reproducir el camino.
+  - Permisos del sistema se aceptan y se registran como variante.
+
+5.9 TERMINACION
+
+  Termina al ocurrir lo primero de: frontera vacia, limite alcanzado
+  (pantallas, acciones o minutos) o interrupcion del usuario. Checkpoint cada
+  N acciones para poder reanudar.
+
+
+6. ENTRADAS
+--------------------------------------------------------------------------------
+6.1 exploracion.json (configuracion de la corrida)
+  app, appium (url, dispositivo, capabilitiesExtra), precondicion, datos,
+  limites, exclusiones, tramoMinutos, huella.umbral, ia, textosVisibles,
+  capturas, referencia, ajustes, bloqueos, salida.
+
+6.2 datos.json (datos de prueba)
+  Orden de busqueda: id+pantalla > id > etiqueta+pantalla > etiqueta > porTipo
+  > sin dato. Secretos con la forma ${ENV:NOMBRE}. Campos sensibles se escriben
+  en el dispositivo pero nunca se guardan en el catalogo.
+  Sin dato y sin IA: el campo se omite y se lista en el informe final.
+
+6.3 Precondicion (de donde parte la exploracion)
+  ya-iniciada : alguien deja la app lista y arranca la corrida.
+  pasos       : lista corta de tocar / escribir / esperar.
+  comando     : comando externo que deja el entorno listo. Recomendado para CI
+                y para repetibilidad.
+
+
+7. SALIDAS
+--------------------------------------------------------------------------------
+  catalogo.json   Pantallas, elementos, locators, transiciones, textos.
+  catalogo.md     Version legible del catalogo.
+  grafo.mmd       Grafo de navegacion en Mermaid.
+  informe.md      Que se exploro y que no, campos sin dato, omitidos.
+  progreso.json   Avance en porcentaje y etiqueta de estado.
+  checkpoint      Frontera pendiente para reanudar.
+  revision.json   Renombres y ocultamientos hechos por una persona.
+  usos.json       Manifiesto de flujos automatizados y que locators usan.
+  capturas/       PNG por pantalla nueva (solo si capturas = "pantallas").
+
+Calidad de locator: estable, ancla, fragil. Se informa la proporcion de estable
+o ancla pero no se exige como meta.
+
+
+8. COMANDOS DE LA CLI
+--------------------------------------------------------------------------------
+  apptrak --config exploracion.json              Corrida nueva
+  apptrak --config exploracion.json --reanudar   Continua una corrida
+  apptrak --config exploracion.json --nueva      Fuerza una corrida nueva
+  apptrak comparar <A> <B> [--entre-plataformas] [--fallar-si <cond>]
+  apptrak consultar <catalogo> <subcomando>
+        subcomandos: pantallas, pantalla, buscar, sin-id, textos, camino
+  apptrak impacto --usos usos.json --despues B [--antes A]
+  apptrak actualizar --usos usos.json --despues B [--antes A] [--aplicar]
+
+  Codigos de salida:
+    0  Corrida terminada (completa o limite-alcanzado) o informe correcto.
+    1  Error de configuracion o entorno (sin Appium, app no instalada, JSON invalido).
+    2  Se cumplio una condicion de --fallar-si.
+    3  Corrida detenida (usuario o recuperacion imposible).
+
+
+9. CONTINUIDAD Y SEGURIDAD
+--------------------------------------------------------------------------------
+  - La app es de pruebas: crear, editar o borrar datos no es problema.
+  - Solo se interactua con la app indicada (app.id); lo demas es salio-de-app.
+  - Exclusiones por continuidad (activas por defecto): cerrar sesion, eliminar
+    cuenta, cambiar contrasena, desinstalar, restablecer app (y equivalentes en
+    ingles). Comparacion sin mayusculas ni acentos, sobre texto, descripcion e
+    id del elemento y de sus descendientes.
+  - No incluye pagar, eliminar ni enviar a proposito.
+  - Verificar que el backend tambien sea de pruebas. Usar cuenta y entorno
+    dedicados.
+  - Nunca se guarda el valor de campos sensibles. Textos de mas de 120
+    caracteres se recortan. Capturas desactivadas por defecto.
+  - Bloqueos (otp, captcha, biometria): la pantalla se marca bloqueada y no se
+    profundiza.
+
+
+10. TECNOLOGIAS
+--------------------------------------------------------------------------------
+  Lenguaje           Node.js 24 LTS + TypeScript
+  Gestor de paquetes pnpm
+  Cliente Appium     webdriverio
+  Servidor / drivers Appium + UiAutomator2 (Android) + XCUITest (iOS)
+  Parseo del arbol   fast-xml-parser
+  Validacion         zod (fuente unica de verdad; exporta JSON Schema)
+  CLI                commander
+  Logs               pino + pino-pretty
+  Pruebas            vitest con arboles XML como fixtures
+  Lint y formato     biome
+  Build / ejecucion  tsup / tsx
+  Almacen de trabajo node:sqlite (incluido en Node 24) para frontera y
+                     checkpoint; JSON como salida final
+  IA opcional        API de Claude detras de la interfaz ProveedorIA
+  Android en CI      Emulador con KVM
+  iOS                Simulador en macOS primero; dispositivo real despues
+  Granja (opcional)  BrowserStack, Sauce Labs o LambdaTest, solo tras medir costo
+
+  Entorno de desarrollo: macOS (Apple Silicon), JDK 17, Android SDK, adb.
+
+
+11. ESTRUCTURA DEL PROYECTO
+--------------------------------------------------------------------------------
+  Apptrak/
+    package.json  tsconfig.json  biome.json  .gitignore
+    exploracion.json  datos.json            (ejemplos)
+    schemas/        JSON Schemas publicados
+    scripts/        generar-esquemas.ts
+    exploraciones/  salidas de cada corrida (ignorada en git)
+    .appium/        drivers de Appium locales al proyecto (ignorada en git)
+    src/
+      cli.ts
+      config/  driver/  normalizador/  huella/  frontera/  calidad/
+      politica/  datos/  motor/  almacen/  informe/  comparador/
+      impacto/  ia/
+    test/
+      fixtures/arboles/   arboles XML de ejemplo
+      config.test.ts
+
+
+12. PLAN POR HITOS
+--------------------------------------------------------------------------------
+  E0  Prototipo       Script que recorre una app Android de prueba por reglas,
+                      sin IA, y vuelca un JSON. Se miden huella, tiempo por
+                      pantalla y repetibilidad. Valida H1 y H2.
+  E1  Catalogo        Normalizador, huella, variantes, calidad y consistencia,
+                      grafo, checkpoint y reanudacion.
+  E2  Entradas y avance
+                      exploracion.json y datos.json con esquemas, precondiciones,
+                      politica de continuidad, indicadores de avance y
+                      progreso.json.
+  E3  Informes y consulta
+                      catalogo.md, grafo.mmd, informe.md, revision.json,
+                      comparar y consultar.
+  E4  IA opcional     ProveedorIA: nombres de pantalla y datos faltantes.
+  E5  iOS             Retroceso por NavigationBar o por camino; reduccion del arbol.
+  E6  Granja (opcional)
+                      Servidor Appium remoto, incluido tramoMinutos.
+  E7  Mantenimiento ante cambios de UI
+                      usos.json, impacto y actualizar. Puede empezar tras E3.
+                      Recomendado tratarlo como un producto separado.
+
+
+13. METRICAS Y METAS INICIALES
+--------------------------------------------------------------------------------
+  Cobertura de pantallas         >= 80 % de una lista de referencia (min. 10)
+  Locators "estable" no unicos   0
+  Repetibilidad entre corridas   >= 90 % de pantallas comunes
+  Calidad de la huella           0 fusiones incorrectas, <= 10 % divididas
+  Continuidad                    0 perdidas de sesion irrecuperables
+  Cumplimiento de limites        Termina dentro de maxMinutos y maxAcciones
+  Emparejamiento entre versiones 0 incorrectos con confianza alta, >= 70 %
+                                 de cambios de locator resueltos
+
+  No se fija meta de eficiencia: E0 la mide y queda como linea base.
+
+
+14. RIESGOS PRINCIPALES
+--------------------------------------------------------------------------------
+  1. Huella dependiente de ids. En apps sin ids (Compose sin testTag, Flutter o
+     React Native sin testID) los tokens se reducen a la clase y las pantallas
+     se fusionan. El plan B de H1 no cubre este caso.
+  2. Tiempo. Cada accion mas la lectura del arbol puede tomar 2 a 5 segundos;
+     3000 acciones son varias horas y maxMinutos = 90 no alcanza.
+  3. R2 contra R3. Borrar datos y exigir repetibilidad solo es compatible con
+     una precondicion "comando" que restaure el entorno.
+  4. Explosion de estados (listas, pantallas dinamicas): huella con listas
+     colapsadas y limites por pantalla, acciones y tiempo.
+  5. iOS: sin tecla BACK, arbol pesado, clickable inferido. Reproducir caminos
+     crece de forma cuadratica en apps profundas.
+  6. Sesion de Appium que caduca en corridas largas: mantenerla viva y reanudar.
+  7. Costo en granja (pago por minuto): limite de minutos, correr fuera de horario.
+  8. Emparejamiento incorrecto entre versiones: solo se propone con confianza
+     alta o media; por defecto no se aplica nada.
+
+
+15. HIPOTESIS A VALIDAR
+--------------------------------------------------------------------------------
+  H1  Huella con Jaccard >= 0,85 separa bien las pantallas        (E0)
+  H2  El tiempo por corrida cabe en maxMinutos                    (E0)
+  H3  El retroceso por NavigationBar es fiable en iOS             (E5)
+  H4  Una granja permite corridas largas a costo aceptable        (E6)
+  H5  La IA nombra bien las pantallas con solo el arbol reducido  (E4)
+  H6  El avance de la frontera es una senal util aunque oscile    (E2)
+  H7  El emparejamiento entre versiones no genera falsos positivos (E7)
+
+
+16. PENDIENTES QUE EL SDD ORIGINAL NO CUBRE
+--------------------------------------------------------------------------------
+  Alcance de la app
+    - Apps hibridas, WebView y Flutter: manejo de contextos NATIVE_APP y WEBVIEW_*.
+    - Gestos distintos al tap: long press, swipe horizontal, pull-to-refresh,
+      drag, bottom sheets, carruseles, pickers de fecha, spinners.
+    - Estado de controles (switch, checkbox, pestana seleccionada) que cambia
+      la huella sin ser otra pantalla.
+
+  Entorno
+    - Perfil del dispositivo en el catalogo: tamano, densidad, idioma, tema
+      oscuro, tamano de fuente, version del SO.
+    - Ruido no determinista: onboarding, banners, anuncios, A/B flags,
+      notificaciones push, permisos, teclado, cambios de red.
+    - Salidas controladas: deep links, share sheets, navegador externo,
+      prompts de actualizacion.
+
+  Logica de la huella
+    - Una variante se define como "supera el umbral pero aparecen nodos". En
+      pantallas pequenas un dialogo baja el Jaccard bajo 0,85 y se registra
+      como pantalla nueva. Detectar overlays por ventana, paquete o clase de
+      dialogo, o usar contencion ademas de Jaccard.
+    - Costo de recuperacion por reproduccion de caminos: sin estimacion ni tope.
+
+  Operacion y contrato
+    - Rendimiento: ajustes del driver (waitForIdleTimeout, snapshotMaxDepth,
+      comandos mobile:) y paralelizacion por ramas con varios dispositivos.
+    - Formato de locator de salida: accessibility id, -android uiautomator,
+      -ios predicate string, -ios class chain (mejores que xpath).
+    - Versionado del catalogo: campo schemaVersion y politica de migracion.
+    - Seguridad del propio explorador: PII en page source, logs y capturas;
+      redaccion de logs; secretos en CI.
+    - Observabilidad: logs estructurados, logcat o crash log, deteccion de
+      crash de la app (hoy se confunde con salio-de-app).
+    - Estrategia de pruebas del explorador: app fixture, arboles de referencia,
+      pruebas de contrato de los archivos de salida.
+    - Alternativas existentes: comparar con Firebase Robo test, Fastbot,
+      DroidBot y Stoat; justificar construir en lugar de comprar.
+    - Esfuerzo, equipo y costo de dispositivos: sin estimacion.
+    - Criterio de E0: definir la app piloto y cuantas pantallas conocidas.
+
+
+17. VIABILIDAD (RESUMEN)
+--------------------------------------------------------------------------------
+  Android, E0 a E3     Viable, riesgo moderado. Orden de magnitud: 2 a 3 meses
+                       para un desarrollador senior (confirmar con E0).
+  iOS (E5)             Viable pero mas costoso.
+  Granja (E6) y E7     Ambiciosos. E7 es casi un segundo producto.
+
+  Enfoque recomendado: empezar por E0 en Android con una app piloto que tenga
+  ids, y medir tiempo por accion y calidad de la huella antes de escribir nada
+  mas. Esos dos numeros deciden si el resto del diseno se sostiene.
+
+
+18. PROXIMOS PASOS
+--------------------------------------------------------------------------------
+  1. Terminar el esqueleto del proyecto (dependencias, drivers de Appium,
+     estructura, esquema de configuracion, CLI con comandos pendientes).
+  2. Elegir la app piloto y definir la lista de pantallas de referencia.
+  3. E0: Driver de Appium + normalizador del arbol XML, probado primero con
+     arboles guardados en test/fixtures/arboles.
+  4. Medir huella, tiempo por pantalla y repetibilidad; ajustar umbral y metas.
+
+================================================================================
+FIN DEL DOCUMENTO
+================================================================================

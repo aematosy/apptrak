@@ -1,0 +1,58 @@
+{
+  "name": "apptrak",
+  "version": "0.1.0",
+  "description": "Explorador autónomo de apps móviles",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "dev": "tsx src/cli.ts",
+    "build": "tsup src/cli.ts --format esm --clean",
+    "lint": "biome check .",
+    "fix": "biome check --write .",
+    "typecheck": "tsc --noEmit",
+    "schemas": "tsx scripts/generar-esquemas.ts",
+    "appium": "APPIUM_HOME=.appium appium",
+    "test-watch": "vitest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.15.0",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@12.15.0",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "bin": {
+    "apptrak": "./dist/cli.js"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "pino": "^9.5.0",
+    "pino-pretty": "^11.2.0",
+    "zod": "^3.24.1",
+    "webdriverio": "^9.5.0",
+    "@appium/types": "^0.6.0",
+    "fast-xml-parser": "^5.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.11.0",
+    "@biomejs/biome": "^1.9.4",
+    "typescript": "^5.7.3",
+    "vitest": "^3.1.0",
+    "tsx": "^4.19.0",
+    "tsup": "^9.0.0"
+  }
+}

@@ -1,0 +1,268 @@
+================================================================================
+APPTRAK
+Que falta para poder construir la app completa
+Version del documento: 1.0  |  Fecha: 2026-10-23
+Complementa: apptrak-arquitectura-y-alcance.txt + sdd-exploracion-autonoma.md
+================================================================================
+
+
+1. VEREDICTO
+--------------------------------------------------------------------------------
+NO: con el primer txt solo no alcanza para construir la app completa.
+
+  - apptrak-arquitectura-y-alcance.txt es un RESUMEN de arquitectura y alcance.
+    Sirve para entender el producto, no para implementarlo.
+  - La ESPECIFICACION detallada vive en sdd-exploracion-autonoma.md (1156
+    lineas). Ahi estan los campos exactos, las reglas y los formatos que el
+    resumen no copia.
+  - Ademas, el SDD tiene ambiguedades y huecos que hay que resolver antes de
+    escribir codigo (secciones 3 y 4 de este documento).
+  - Y hay datos que solo tu puedes aportar: la app piloto, el dispositivo, las
+    credenciales de prueba, etc. (seccion 5).
+
+Con el SDD completo + los dos txt SI hay contexto suficiente para construir
+E0 a E3 (Android) sin bloqueos grandes, si se resuelven antes los puntos
+marcados como BLOQUEANTE. iOS (E5), granja (E6) y mantenimiento ante cambios
+de UI (E7) necesitan mas definicion.
+
+Regla de trabajo: la app no se construye de una sola vez. Se construye por
+hitos, dando a cada paso solo las secciones del SDD que ese hito necesita
+(seccion 7).
+
+
+2. CORRECCION AL PRIMER DOCUMENTO
+--------------------------------------------------------------------------------
+  - La calidad de un locator tiene CUATRO niveles, no tres: estable, media,
+    ancla, fragil (SDD 10.3). El primer txt decia tres; ya esta corregido.
+
+
+3. DETALLE DEL SDD QUE EL RESUMEN NO COPIA (hay que seguirlo al codificar)
+--------------------------------------------------------------------------------
+Cuando se implemente cada modulo, la fuente de verdad es el SDD:
+
+  SDD 5.2   Reglas de formato v1 de datos.json (orden de busqueda, normalizacion
+            de etiquetas, ${ENV:...}, validacion al inicio).
+  SDD 5.3   Pasos de precondicion (tocar / escribir / esperar) y su sintaxis.
+  SDD 6.2   Contexto de cada elemento: ancestros (max 3), descendientes (max 8),
+            etiquetaCercana y etiquetaPosicion.
+  SDD 6.4   Frontera: orden de prueba (campos primero, navegacion principal,
+            ids estables, resto), topes y tratamiento de listas.
+  SDD 6.5   Pantallas largas: desplazamiento, union de lecturas, lista-truncada.
+  SDD 6.7   Clasificacion de resultados y permisos del sistema.
+  SDD 9     Indicadores de avance (frontera, ritmo, presupuesto, cobertura),
+            formato de progreso.json y etiquetas de estado.
+  SDD 10.1  Modelo de datos completo: campos de catalogo, pantalla, elemento y
+            transicion; inferencia de "rol" por clase.
+  SDD 10.3  Estrategias y orden de preferencia de locators, verificacion de los
+            locators construidos, criterios de calidad y consistencia.
+  SDD 10.4  Estructura de carpetas de una corrida y reglas de evolucion del
+            contrato (solo se suman campos opcionales; catalogo inmutable).
+  SDD 10.6  usos.json y 10.7 revision.json.
+  SDD 11.1  Subcomandos de "consultar" y tipos de coincidencia.
+  SDD 11.5  Comparacion de versiones y equivalencia de pantallas.
+  SDD 11.8  Reglas de emparejamiento de elementos, informe de impacto, parche
+            de locators y condiciones de --aplicar.
+  SDD 17    Lista base de exclusiones por continuidad (espanol e ingles).
+
+
+4. AMBIGUEDADES Y HUECOS DEL SDD A RESOLVER
+--------------------------------------------------------------------------------
+Marcados: [BLOQUEANTE] = decidir antes de E0/E1. [IMPORTANTE] = antes de cerrar
+el hito. [MENOR] = se puede decidir sobre la marcha.
+
+4.1 Huella y pantallas
+  [BLOQUEANTE] Deteccion de variante contra pantalla nueva (SDD 6.3). Una
+    variante se define como "supera el umbral pero aparecen nodos". En una
+    pantalla pequena, un dialogo baja el Jaccard bajo 0,85 y quedaria como
+    pantalla nueva. Decidir: detectar overlays por ventana, paquete o clase de
+    dialogo, y/o usar contencion (el conjunto A esta dentro del B) ademas de
+    Jaccard.
+  [BLOQUEANTE] Algoritmo para colapsar listas. El SDD dice "muchos hermanos con
+    la misma estructura" sin definir cuantos hermanos, ni como se compara la
+    estructura (clase, ids, profundidad). Definir regla y probarla con arboles
+    reales.
+  [IMPORTANTE] Estado de los controles. Una pestana seleccionada, un switch
+    activado o un checkbox marcado pueden cambiar la huella sin ser otra
+    pantalla. Decidir que atributos de estado se excluyen de los tokens.
+  [IMPORTANTE] Apps sin ids (Compose sin testTag, Flutter o React Native sin
+    testID): los tokens se reducen a la clase y las pantallas se fusionan.
+    Decidir si se exige id en la app piloto o se agrega una senal alternativa
+    (titulo, textos estructurales).
+  [MENOR] Formato del id de pantalla. El texto dice "hash corto de 8 caracteres
+    hexadecimales"; los ejemplos usan "p-3fa9". Fijar: "p-" + 8 hex.
+
+4.2 Espera y estabilidad
+  [BLOQUEANTE] "Esperar a que cargue" (SDD 6.6) exige huella identica en dos
+    lecturas consecutivas. Pantallas con carruseles, animaciones, relojes o
+    video nunca se estabilizan. Definir que pasa al agotar esperaMaxSegundos
+    (tomar la ultima lectura, marcar la pantalla como inestable, etc.).
+
+4.3 Entradas y datos
+  [BLOQUEANTE] Tipo de campo para porTipo (numerico, email, telefono, fecha).
+    El SDD dice que se "infiere del campo: teclado numerico, correo...", pero no
+    queda claro que el page source de UiAutomator2 exponga el tipo de teclado.
+    Validar en E0 con la app piloto. Alternativas: inferir por hint, etiqueta o
+    id, o consultar el tipo de entrada por otra via del driver.
+  [IMPORTANTE] Seleccion de la "navegacion principal" (pestanas, barra inferior,
+    menu): no hay heuristica definida. Proponer reglas (clase, posicion, ids).
+  [IMPORTANTE] Controles que no son texto ni tap (spinners, date pickers,
+    sliders, switches): el SDD solo cubre tocar, escribir, desplazar y atras.
+
+4.4 Almacenamiento
+  [IMPORTANTE] El SDD fija estado.json como checkpoint. En el esqueleto propuse
+    node:sqlite para la frontera. Decidir: (a) seguir el SDD con estado.json, o
+    (b) usar SQLite como almacen de trabajo y exportar estado.json. Recomendado
+    (a) para E0 y E1, y evaluar SQLite si el rendimiento lo exige.
+  [MENOR] El id del catalogo usa hora local (AAAAMMDD-HHMMSS). Dos corridas en el
+    mismo segundo o cambios de zona horaria pueden colisionar. Considerar UTC o
+    agregar sufijo.
+
+4.5 IA
+  [IMPORTANTE] "Arbol reducido" para enviar a la IA (SDD 7.2) no esta definido.
+    Especificar que campos se envian y como se recorta.
+
+4.6 Mantenimiento ante cambios de UI (E7)
+  [IMPORTANTE] "--aplicar" reescribe codigo de automatizacion en un lenguaje
+    desconocido (el ejemplo usa Java). Limitar el alcance: reemplazo exacto de
+    cadena en la linea indicada, sin parsear el lenguaje.
+  [IMPORTANTE] usos.json lo escribe "el generador de automatizacion", que no
+    existe en este proyecto. Definir el contrato que debe cumplir ese generador
+    o decidir que Apptrak tambien lo produce.
+  [MENOR] Umbrales de similitud usados en emparejamiento (0,6 y el umbral de
+    huella) estan fijados sin datos. Calibrar en E7.
+
+4.7 Operacion
+  [IMPORTANTE] Rendimiento: ajustes de driver (waitForIdleTimeout,
+    snapshotMaxDepth, comandos mobile:), y reduccion del costo de leer el
+    arbol. H2 puede fallar sin esto.
+  [IMPORTANTE] Contextos hibridos (WebView) y apps Flutter: no hay manejo de
+    NATIVE_APP / WEBVIEW_*. Decidir si quedan fuera de alcance o se agregan.
+  [IMPORTANTE] Perfil del dispositivo en el catalogo (idioma, tema oscuro,
+    tamano de fuente, densidad): el SDD guarda dispositivo, pero no fuerza ni
+    registra idioma ni tema.
+  [IMPORTANTE] Deteccion de crash de la app: hoy se confunde con "salio-de-app".
+  [MENOR] Taxonomia de errores y convenciones de log (niveles, campos, redaccion
+    de datos sensibles).
+
+
+5. LO QUE SOLO TU PUEDES APORTAR (entradas necesarias)
+--------------------------------------------------------------------------------
+Responder esto desbloquea E0. Sin la app piloto no se puede medir nada.
+
+  1. APP PILOTO
+     - Nombre, id de paquete (Android) y version.
+     - APK de debug o build instalable (o acceso para generarlo).
+     - Se construye con Compose, Views, Flutter, React Native o es hibrida?
+     - Tiene resource-id / contentDescription en los elementos principales?
+     - Es una app de pruebas con backend de pruebas dedicado?
+  2. DISPOSITIVO
+     - Emulador (que AVD y nivel de API) o dispositivo fisico?
+     - Android 12 o superior recomendado.
+  3. ESTADO DE PARTIDA
+     - La app requiere login? Credenciales de prueba y como se obtienen.
+     - Existe un comando o script para dejar el entorno limpio (precondicion
+       "comando")? Si no, se empieza con "ya-iniciada".
+  4. LISTA DE REFERENCIA
+     - Al menos 10 pantallas conocidas (nombre + un id o texto que las
+       reconozca) para medir cobertura (SDD 9.3 y 16).
+  5. USO DEL CATALOGO
+     - Quien o que consumira el catalogo: QA manual, un agente de IA, un
+       generador de codigo propio?
+     - En que lenguaje y framework esta (o estara) la automatizacion?
+  6. IA
+     - Se usara IA para nombrar pantallas (E4)? Con que proveedor y presupuesto?
+  7. ENTORNO DE EJECUCION
+     - Solo local en Mac, o tambien CI? Cual (GitHub Actions, Jenkins, otro)?
+     - Hay granja de dispositivos disponible o prevista?
+  8. iOS
+     - Para cuando se necesita? Hay Mac, simulador o iPhone de pruebas y
+       cuenta de desarrollador?
+  9. ALCANCE DE E7
+     - Se construye dentro de Apptrak o como producto separado?
+  10. EQUIPO Y PLAZOS
+     - Cuantas personas, con que experiencia, y fecha objetivo del primer
+       catalogo util.
+
+
+6. PIEZAS TECNICAS QUE AUN NO EXISTEN EN EL REPOSITORIO
+--------------------------------------------------------------------------------
+  Tipos y esquemas
+    - Esquemas zod del catalogo, pantalla, elemento y transicion (SDD 10.1).
+    - Esquemas de datos.json, referencia.json, progreso.json, revision.json y
+      usos.json, exportados como JSON Schema en la carpeta schemas/.
+    - Campo "contrato" y politica de evolucion (solo sumar campos opcionales).
+  Datos de prueba
+    - Arboles XML REALES de la app piloto en test/fixtures/arboles (capturados
+      con Appium o adb). Sin ellos no se puede calibrar huella ni calidad.
+    - Pares de lecturas etiquetados a mano (misma pantalla / pantalla distinta)
+      para calibrar el umbral (SDD 17, decision 1).
+    - App fixture propia o de codigo abierto para pruebas repetibles.
+  Appium
+    - Script de verificacion del entorno: servidor arriba, driver instalado,
+      dispositivo visible, app instalada.
+    - Capabilities Android minimas: platformName, appium:automationName
+      (UiAutomator2), appium:deviceName, appium:appPackage, appium:noReset.
+  Infraestructura
+    - README con puesta en marcha.
+    - Flujo de CI (lint, typecheck, pruebas) y, mas adelante, corrida nocturna.
+    - Licencia y politica de versionado del paquete.
+    - Convencion de commits y ramas.
+
+
+7. ORDEN DE CONSTRUCCION RECOMENDADO
+--------------------------------------------------------------------------------
+Cada paso indica que secciones del SDD hay que tener a la mano.
+
+  PASO 0  Terminar el esqueleto del repositorio (dependencias, drivers,
+          estructura, esquema de configuracion, CLI). Ya casi esta.
+
+  PASO 1  Entorno Appium verificado (SDD 5.1, 13).
+          Entregable: sesion abierta contra el emulador y getPageSource guardado.
+
+  PASO 2  Capturar fixtures reales de la app piloto: 10 a 20 pantallas, con
+          variantes (dialogo, teclado, lista corta y larga).
+          Entregable: test/fixtures/arboles/*.xml
+
+  PASO 3  Normalizador (SDD 6.2). Funcion pura, con pruebas.
+          Entregable: nodo normalizado + contexto por elemento.
+
+  PASO 4  Huella y variantes (SDD 6.3, 17.1). Resolver antes los bloqueantes
+          4.1. Calibrar umbral con los pares etiquetados.
+          Entregable: huella con 0 fusiones incorrectas en el conjunto.
+
+  PASO 5  Calidad de locators (SDD 10.3). Unicidad, estrategias, verificacion.
+          Entregable: mejor locator + alternativas por elemento.
+
+  PASO 6  Frontera y politica (SDD 6.4, 8, 17). Orden de prueba, topes,
+          exclusiones.
+          Entregable: lista de acciones candidatas por pantalla.
+
+  PASO 7  Motor minimo E0 (SDD 6.1, 6.6, 6.7, 6.8). Bucle con retroceso y
+          recuperacion basica, sin IA, volcando un JSON.
+          Entregable: recorrido de la app piloto sin intervencion. MEDIR tiempo
+          por accion, repetibilidad y calidad de huella (valida H1 y H2).
+
+  PASO 8  Catalogo, checkpoint y reanudacion (SDD 10.1, 10.4, 6.9) = hito E1.
+
+  PASO 9  Entradas y avance (SDD 5.2, 5.3, 9) = hito E2.
+
+  PASO 10 Informes y consulta (SDD 10.4, 11.1, 11.5) = hito E3.
+
+  Despues, segun decisiones de la seccion 5: E4 (IA), E5 (iOS), E6 (granja),
+  E7 (mantenimiento ante cambios de UI).
+
+
+8. PREGUNTAS PRIORITARIAS (responder estas primero)
+--------------------------------------------------------------------------------
+  1. Cual es la app piloto y se puede instalar en un emulador?
+  2. Tiene ids (resource-id) en sus elementos principales?
+  3. Requiere login, y como se deja la app lista (credenciales, comando)?
+  4. Cuales son las 10 o mas pantallas de referencia?
+  5. Quien consumira el catalogo (QA, agente de IA, generador de codigo)?
+  6. Se decide ya el comportamiento ante pantallas que nunca se estabilizan?
+  7. Se mantiene estado.json (SDD) o se cambia a SQLite?
+  8. iOS entra en el primer ciclo o se pospone?
+
+================================================================================
+FIN DEL DOCUMENTO
+================================================================================
