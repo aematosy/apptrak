@@ -12,7 +12,10 @@
     "typecheck": "tsc --noEmit",
     "schemas": "tsx scripts/generar-esquemas.ts",
     "appium": "APPIUM_HOME=.appium appium",
-    "test-watch": "vitest"
+    "test-watch": "vitest",
+    "capturar": "tsx scripts/capturar-arbol.ts",
+    "capturar-secuencia": "tsx scripts/capturar-secuencia.ts",
+    "analizar-arboles": "tsx scripts/analizar-arboles.ts"
   },
   "keywords": [],
   "author": "",
@@ -39,20 +42,20 @@
     ]
   },
   "dependencies": {
+    "@appium/types": "^0.6.0",
     "commander": "^12.1.0",
+    "fast-xml-parser": "^5.11.0",
     "pino": "^9.5.0",
     "pino-pretty": "^11.2.0",
-    "zod": "^3.24.1",
     "webdriverio": "^9.5.0",
-    "@appium/types": "^0.6.0",
-    "fast-xml-parser": "^5.11.0"
+    "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@types/node": "^22.11.0",
     "@biomejs/biome": "^1.9.4",
-    "typescript": "^5.7.3",
-    "vitest": "^3.1.0",
+    "@types/node": "^22.11.0",
+    "tsup": "^9.0.0",
     "tsx": "^4.19.0",
-    "tsup": "^9.0.0"
+    "typescript": "^5.7.3",
+    "vitest": "^3.1.0"
   }
 }
