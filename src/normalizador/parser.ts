@@ -30,6 +30,7 @@ interface RawNode {
   "@_bounds"?: string;
   "@_enabled"?: string;
   "@_visible"?: string;
+  "@_displayed"?: string;
   "@_clickable"?: string;
   "@_scrollable"?: string;
   "@_focused"?: string;
@@ -83,7 +84,11 @@ function extraerAtributos(rawNode: RawNode, platform: "android" | "ios") {
   const paquete = (rawNode["@_package"] as string) || null;
 
   const habilitado = parseBool(rawNode["@_enabled"] as string);
-  const visible = parseBool(rawNode["@_visible"] as string);
+  // Android: displayed="true", iOS: visible="true"
+  const visible =
+    platform === "android"
+      ? parseBool(rawNode["@_displayed"] as string)
+      : parseBool(rawNode["@_visible"] as string);
   const clickable = parseBool(rawNode["@_clickable"] as string);
   const scrollable = parseBool(rawNode["@_scrollable"] as string);
   const enfocado = parseBool(rawNode["@_focused"] as string);

@@ -2,7 +2,7 @@
 
 Explorador autónomo de apps móviles. Genera catálogos de pantallas, elementos, locators y transiciones para automatización de pruebas.
 
-**Status actual**: PASO 0-7 completados (E0 proto) — 65 tests, ~3500 LOC, arquitectura funcional.
+**Status actual**: E0 EN PROGRESO — Arquitectura implementada, en validación y calibración.
 
 ## Desarrollo rápido
 
@@ -36,16 +36,25 @@ pnpm run appium -- driver install uiautomator2
 pnpm run appium
 ```
 
-## Hitos (E0-E7)
+## Estado detallado de PASO 0-7
 
-### ✅ E0: Prototipo (PASO 0-7)
-- **Esqueleto base**: CLI, zod, estructura
-- **Normalizador**: XML → nodos (17 tests)
-- **Huella**: Tokens + Jaccard (14 tests)
-- **Calidad**: 5 estrategias de locators (11 tests)
-- **Frontera**: Orden de prueba + política (13 tests)
-- **Motor**: Reconocimiento de pantallas (10 tests)
-- **Status**: Arquitectura lista, falta integración Appium
+| PASO | Descripción | Estado |
+|------|-------------|--------|
+| **0** | Esqueleto base (repo, CLI, zod) | ✅ Completado |
+| **1** | Conectividad Appium | ✅/🟡 Scripts funcionales, sin automatización |
+| **2** | Fixtures reales Wikipedia | 🟡 1 capturado, 10-14 pendientes |
+| **3** | Normalizador (XML → nodos) | 🟡 Implementado, en validación (displayed fix) |
+| **4** | Huella (tokens + Jaccard) | 🟡 Implementado, calibración pendiente |
+| **5** | Calidad de locators | 🟡 Prototipo, no validado en campo |
+| **6** | Frontera + política continuidad | 🟡 Prototipo, no validado en campo |
+| **7** | Motor autónomo Appium | 🔴 Pendiente integración real |
+
+## Hipótesis E0 a validar
+
+| Hipótesis | Algoritmo | Evidencia | Próximo |
+|-----------|-----------|-----------|----------|
+| **H1**: Jaccard >= 0.85 separa bien | ✓ Implementado (1.0 consigo) | ⏳ Pendiente calibración 10-15+ pantallas | Capturar fixtures |
+| **H2**: Tiempo/acción < 5s | ⏳ Proto solo | ❌ Sin medición real (1000ms hardcodeado) | Motor real Appium |
 
 ### ⏳ E1: Catálogo (PASO 8)
 - Modelo: Pantallas + Elementos + Transiciones

@@ -88,7 +88,7 @@ export function generarTokens(arbol: ArbolNormalizado): Token[] {
         if (hermanos.length >= 3) {
           tokens.push({
             clase: nodo.clase,
-            identificador: `[LISTA_COLLAPSED_${hermanos.length}_items]`,
+            identificador: "[LISTA_COLLAPSED]",
             esLista: true,
           });
 

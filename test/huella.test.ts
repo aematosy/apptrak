@@ -1,20 +1,14 @@
-import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "node:fs";
+import { beforeAll, describe, expect, it } from "vitest";
+import { compararHuellas, jaccard } from "../src/huella/jaccard.js";
+import { calcularHuella, generarTokens, hashHuella } from "../src/huella/tokens.js";
 import { normalizarPageSource } from "../src/normalizador/index.js";
-import {
-  calcularHuella,
-  generarTokens,
-  hashHuella,
-} from "../src/huella/tokens.js";
-import { jaccard, compararHuellas } from "../src/huella/jaccard.js";
+import type { ArbolNormalizado, NodoNormalizado } from "../src/normalizador/tipos.js";
 
 let wikipediaXML: string;
 
 beforeAll(() => {
-  wikipediaXML = readFileSync(
-    "test/fixtures/arboles/wikipedia-inicio.xml",
-    "utf-8"
-  );
+  wikipediaXML = readFileSync("test/fixtures/arboles/wikipedia-inicio.xml", "utf-8");
 });
 
 describe("Huella (PASO 4)", () => {
@@ -41,18 +35,133 @@ describe("Huella (PASO 4)", () => {
       }
     });
 
-    it("detecta contenedores de lista", () => {
-      const arbol = normalizarPageSource(wikipediaXML);
-      const conListaScroll = arbol.nodos.filter((n) =>
-        n.clase.includes("ScrollView")
-      );
+    it("colapso de listas SIN cardinalidad (3, 10, 30 items = mismo token)", () => {
+      // Crear árboles ficticios con listas de 3, 10 y 30 items
+      // Usando la estructura real que generaTokens() espera
 
-      if (conListaScroll.length > 0) {
-        const tokens = generarTokens(arbol);
-        const listaCollapsed = tokens.filter((t) => t.esLista);
-        // Wikipedia onboarding tiene ScrollView pero no items duplicados
-        expect(tokens.length).toBeGreaterThan(0);
-      }
+      // Helper: crear árbol con lista de N items
+      const crearArbolConLista = (cantidad: number): ArbolNormalizado => {
+        const nodos: NodoNormalizado[] = [];
+        let indice = 0;
+
+        // Nodo padre (contenedor ListView)
+        const padre: NodoNormalizado = {
+          indice: indice++,
+          padre: null,
+          clase: "android.widget.ListView",
+          idEstable: "lista_principal",
+          descripcion: null,
+          texto: null,
+          bounds: { x1: 0, y1: 0, x2: 100, y2: 200 },
+          habilitado: true,
+          visible: true,
+          clickable: false,
+          scrollable: true,
+          enfocado: false,
+          esCampoTexto: false,
+          sensible: false,
+          paquete: null,
+          platform: "android",
+          ancestros: [],
+          descendientes: [],
+          etiquetaCercana: null,
+          etiquetaPosicion: null,
+          profundidad: 0,
+          rolInferido: "lista",
+        };
+        nodos.push(padre);
+
+        // Agregar N items idénticos
+        for (let i = 0; i < cantidad; i++) {
+          const item: NodoNormalizado = {
+            indice: indice++,
+            padre: padre.indice,
+            clase: "android.widget.LinearLayout", // mismo para todos
+            idEstable: null,
+            descripcion: null,
+            texto: `Item ${i}`,
+            bounds: { x1: 0, y1: 10 + i * 20, x2: 100, y2: 30 + i * 20 },
+            habilitado: true,
+            visible: true,
+            clickable: true,
+            scrollable: false,
+            enfocado: false,
+            esCampoTexto: false,
+            sensible: false,
+            paquete: null,
+            platform: "android",
+            ancestros: [padre.indice],
+            descendientes: [],
+            etiquetaCercana: null,
+            etiquetaPosicion: null,
+            profundidad: 1,
+            rolInferido: null,
+          };
+          nodos.push(item);
+        }
+
+        return {
+          nodos,
+          width: 100,
+          height: 200,
+          rotacion: 0,
+          timestamp: Date.now(),
+          platform: "android",
+        };
+      };
+
+      // Generar tokens para listas de 3, 10 y 30 items
+      const arbol3 = crearArbolConLista(3);
+      const arbol10 = crearArbolConLista(10);
+      const arbol30 = crearArbolConLista(30);
+
+      const tokens3 = generarTokens(arbol3);
+      const tokens10 = generarTokens(arbol10);
+      const tokens30 = generarTokens(arbol30);
+
+      // Extraer token colapsado de cada conjunto
+      // Debe haber exactamente 1 token colapsado (el del ListView + sus items)
+      const colapsado3 = tokens3.find((t) => t.esLista);
+      const colapsado10 = tokens10.find((t) => t.esLista);
+      const colapsado30 = tokens30.find((t) => t.esLista);
+
+      // Validar que existen
+      expect(colapsado3).toBeDefined();
+      expect(colapsado10).toBeDefined();
+      expect(colapsado30).toBeDefined();
+
+      // Validar que son idénticos (identidad estructural)
+      expect(colapsado3!.identificador).toBe(colapsado10!.identificador);
+      expect(colapsado10!.identificador).toBe(colapsado30!.identificador);
+      expect(colapsado3!.identificador).toBe(colapsado30!.identificador);
+
+      // Validar que el token es el correcto
+      expect(colapsado3!.identificador).toBe("[LISTA_COLLAPSED]");
+      expect(colapsado10!.identificador).toBe("[LISTA_COLLAPSED]");
+      expect(colapsado30!.identificador).toBe("[LISTA_COLLAPSED]");
+
+      // Validar que NO contiene cardinalidad (números)
+      expect(colapsado3!.identificador).not.toMatch(/\d+/);
+      expect(colapsado10!.identificador).not.toMatch(/\d+/);
+      expect(colapsado30!.identificador).not.toMatch(/\d+/);
+
+      // Validar que NO tiene sufijo "_items"
+      expect(colapsado3!.identificador).not.toMatch(/_items/);
+      expect(colapsado10!.identificador).not.toMatch(/_items/);
+      expect(colapsado30!.identificador).not.toMatch(/_items/);
+    });
+
+    it("token colapsado NO incluye cardinalidad", () => {
+      const arbol = normalizarPageSource(wikipediaXML);
+      const tokens = generarTokens(arbol);
+
+      const colapsados = tokens.filter((t) => t.esLista);
+      colapsados.forEach((token) => {
+        // Verificar que NO hay números en el identificador
+        expect(token.identificador).not.toMatch(/\d+_items/);
+        // Debe ser exactamente "[LISTA_COLLAPSED]"
+        expect(token.identificador).toBe("[LISTA_COLLAPSED]");
+      });
     });
   });
 
@@ -188,7 +297,9 @@ describe("Huella (PASO 4)", () => {
       console.log(`   Hash: ${huella.hash}`);
       console.log(`   Tokens: ${huella.tokens.length}`);
       console.log(`   Nodos totales: ${huella.nodosTotales}`);
-      console.log(`   Ratio tokens/nodos: ${(huella.tokens.length / huella.nodosTotales).toFixed(2)}\n`);
+      console.log(
+        `   Ratio tokens/nodos: ${(huella.tokens.length / huella.nodosTotales).toFixed(2)}\n`,
+      );
 
       expect(huella.tokens.length).toBeLessThanOrEqual(huella.nodosTotales);
     });

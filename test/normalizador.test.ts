@@ -1,14 +1,11 @@
-import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "node:fs";
+import { beforeAll, describe, expect, it } from "vitest";
 import { normalizarPageSource } from "../src/normalizador/index.js";
 
 let wikipediaXML: string;
 
 beforeAll(() => {
-  wikipediaXML = readFileSync(
-    "test/fixtures/arboles/wikipedia-inicio.xml",
-    "utf-8"
-  );
+  wikipediaXML = readFileSync("test/fixtures/arboles/wikipedia-inicio.xml", "utf-8");
 });
 
 describe("Normalizador", () => {
@@ -31,9 +28,7 @@ describe("Normalizador", () => {
 
     it("excluye nodos de systemui", () => {
       const arbol = normalizarPageSource(wikipediaXML);
-      const conSystemUI = arbol.nodos.some((n) =>
-        n.paquete?.includes("systemui")
-      );
+      const conSystemUI = arbol.nodos.some((n) => n.paquete?.includes("systemui"));
 
       expect(conSystemUI).toBe(false);
     });
@@ -139,9 +134,9 @@ describe("Normalizador", () => {
 
       if (conEtiqueta) {
         expect(conEtiqueta.etiquetaCercana).toBeDefined();
-        expect(
-          ["arriba", "abajo", "izquierda", "derecha", null]
-        ).toContain(conEtiqueta.etiquetaPosicion);
+        expect(["arriba", "abajo", "izquierda", "derecha", null]).toContain(
+          conEtiqueta.etiquetaPosicion,
+        );
       }
     });
   });
@@ -160,18 +155,39 @@ describe("Normalizador", () => {
 
       // Si hay campos de texto, deben marcar esCampoTexto
       camposTexto.forEach((campo) => {
-        expect(
-          campo.clase.includes("EditText") || campo.clase.includes("TextField")
-        ).toBe(true);
+        expect(campo.clase.includes("EditText") || campo.clase.includes("TextField")).toBe(true);
       });
     });
 
-    it("botón Forward identificado", () => {
-      const arbol = normalizarPageSource(wikipediaXML);
-      const forward = arbol.nodos.find((n) => n.descripcion?.includes("Forward"));
+    it("mapea displayed (Android UiAutomator2) a visible", () => {
+      const arbol = normalizarPageSource(wikipediaXML, { platform: "android" });
 
-      expect(forward).toBeDefined();
-      expect(forward!.rolInferido).toBeDefined();
+      // En Wikipedia real, displayed="true" debe producir visible === true
+      const nodosVisibles = arbol.nodos.filter((n) => n.visible);
+
+      expect(nodosVisibles.length).toBeGreaterThan(0);
+      console.log(`   Nodos visible=true: ${nodosVisibles.length}/${arbol.nodos.length}`);
+    });
+
+    it("extrae textos visibles correctamente", () => {
+      const arbol = normalizarPageSource(wikipediaXML);
+      const textosVisibles = arbol.nodos.filter((n) => n.texto && n.visible).map((n) => n.texto!);
+
+      expect(textosVisibles.length).toBeGreaterThan(0);
+      textosVisibles.forEach((t) => {
+        expect(t.length).toBeGreaterThan(0);
+      });
+    });
+
+    it("detecta elementos interactivos visibles", () => {
+      const arbol = normalizarPageSource(wikipediaXML);
+      const interactivos = arbol.nodos.filter(
+        (n) => n.visible && n.habilitado && (n.clickable || n.scrollable),
+      );
+
+      // Wikipedia debe tener al menos algunos elementos interactivos visibles
+      expect(interactivos.length).toBeGreaterThanOrEqual(1);
+      console.log(`   Elementos interactivos visibles: ${interactivos.length}`);
     });
   });
 
@@ -186,10 +202,18 @@ describe("Normalizador", () => {
 
       console.log("\n📊 Estadísticas de Wikipedia Onboarding:");
       console.log(`   Total nodos: ${arbol.nodos.length}`);
-      console.log(`   Con resource-id: ${conId} (${((conId / arbol.nodos.length) * 100).toFixed(1)}%)`);
-      console.log(`   Con content-desc: ${conDesc} (${((conDesc / arbol.nodos.length) * 100).toFixed(1)}%)`);
-      console.log(`   Con texto: ${conTexto} (${((conTexto / arbol.nodos.length) * 100).toFixed(1)}%)`);
-      console.log(`   Clickables: ${clickables} (${((clickables / arbol.nodos.length) * 100).toFixed(1)}%)\n`);
+      console.log(
+        `   Con resource-id: ${conId} (${((conId / arbol.nodos.length) * 100).toFixed(1)}%)`,
+      );
+      console.log(
+        `   Con content-desc: ${conDesc} (${((conDesc / arbol.nodos.length) * 100).toFixed(1)}%)`,
+      );
+      console.log(
+        `   Con texto: ${conTexto} (${((conTexto / arbol.nodos.length) * 100).toFixed(1)}%)`,
+      );
+      console.log(
+        `   Clickables: ${clickables} (${((clickables / arbol.nodos.length) * 100).toFixed(1)}%)\n`,
+      );
 
       expect(arbol.nodos.length).toBeGreaterThan(0);
     });

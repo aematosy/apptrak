@@ -30,7 +30,7 @@ function calcularPrioridad(
   esNavegacionPrincipal: boolean,
   tieneLocatorEstable: boolean
 ): number {
-  let prioridad = 0;
+  let prioridad = 100;
 
   // Nivel 1: Campos de texto (máxima prioridad)
   if (nodo.esCampoTexto) {
