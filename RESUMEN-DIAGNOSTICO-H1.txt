@@ -1,0 +1,149 @@
+================================================================================
+RESUMEN DIAGNOSTICO H1: ¿Por qué todos los fixtures tienen la misma huella?
+================================================================================
+
+HALLAZGO PRINCIPAL
+==================
+
+🔴 CONCLUSIÓN A: FIXTURES REPETIDOS POR ERROR
+
+Evidencia:
+- 6 fixtures capturados con nombres distintos
+- SHA256 de XML: IDÉNTICO en los 6 (27f1a8a24f627f79)
+- Capturamos accidentalmente el MISMO pageSource 6 veces
+
+Impacto:
+- El problema NO es el algoritmo de tokenización
+- El problema es que PASO 2 capturó mal
+- H1 no pudo calibrarse con datos reales diferentes
+
+
+ANÁLISIS SECUNDARIO DE LA REPRESENTACIÓN
+==========================================
+
+B. PÉRDIDA DE MULTIPLICIDAD (SÍ, pero secundario)
+
+Nodos sin tokens por falta de identificadores:
+  - android.view.View:        6 nodos → 0 tokens (100% pérdida)
+  - android.widget.FrameLayout: 4 nodos → 0 tokens (100% pérdida)
+  - android.widget.LinearLayout: 1 nodos → 0 tokens (100% pérdida)
+
+Nodos con pérdida parcial:
+  - android.widget.TextView:  3 nodos → 1 token (66.7% pérdida por Set)
+
+Set() en generarTokens() descarta instancias duplicadas:
+  - Todos los android.view.View sin id/desc/texto → 1 token único
+  - No preserva "hay 6 View" vs "hay 1 View"
+
+
+C. AUSENCIA DE IDS EN COMPOSE (SÍ, es crítico)
+
+Disponibilidad de atributos discriminantes:
+  - idEstable: 3/18 (16.7%)      ← Muy bajo
+  - descripción: 2/18 (11.1%)    ← Muy bajo
+  - texto: 3/18 (16.7%)          ← Muy bajo
+  - Total con al menos 1: 8/18 (44.4%)
+
+55.6% de los nodos (10/18) DEBEN generar tokens solo por clase.
+
+Impacto: Cuando todos los nodos comparten la misma arquitectura de clases,
+la huella resulta idéntica aunque las pantallas sean diferentes.
+
+
+D. COLAPSO DE LISTAS (NO aplica)
+
+Listas detectadas: 0
+Tokens colapsados [LISTA]: 0
+
+
+RAÍZ DEL PROBLEMA DE H1 (más allá de los fixtures repetidos)
+=============================================================
+
+Aunque los fixtures son iguales, el análisis revela la VERDADERA DEBILIDAD:
+
+Tokens generados (idéntico para todos):
+  Button|
+  ComposeView|
+  FrameLayout|
+  ImageView|
+  LinearLayout|
+  RelativeLayout|
+  TextView|
+  View|
+  + 8 tokens más...
+
+Problema:
+  - Sin ids/descriptions en Compose, casi TODO genera tokens solo por clase
+  - Wikipedia usa Compose (androidx.compose.ui.platform.ComposeView)
+  - El XML es principalmente: FrameLayout > ListView > TabbedLayout > ComposeView
+  - Esa estructura es IDÉNTICA entre pantallas distintas
+
+La huella de clase solamente NO es suficiente para H1.
+
+
+ACCIONES NECESARIAS
+====================
+
+1. INMEDIATO: Recapturar PASO 2 correctamente
+   - Navegar A DIFERENTES PANTALLAS verdaderamente distintas
+   - Verificar SHA256 diferente DESPUÉS de cada captura
+   - Usar: pnpm exec tsx scripts/diagnostico-h1.ts
+
+2. ANTES DE E1: Mejorar la representación de H1
+   Propuesta: Alternativa 1 (Multiplicidad en Tokens)
+   - Mantener contador de clase: "TextView|3" en lugar de "TextView|"
+   - Bajo impacto, mejor discriminación que solo clase
+   - Implementable sin refactor mayor
+
+
+3 ALTERNATIVAS PARA MEJORAR H1
+================================
+
+ALT 1: MULTIPLICIDAD EN TOKENS (RECOMENDADO)
+─────────────────────────────────────────────
+Cambio:  generarTokens() → mantener contador
+Ejemplo: "TextView|3" en lugar de "TextView|"
+Impacto:
+  ✅ Distingue pantallas con diferente cantidad de elementos
+  ✅ Preserva información estructural básica
+  ✅ Bajo refactor, bajo costo
+  ❌ Insuficiente si todas usan Compose con misma arquitectura
+Trade-off: Simple, pero puede no ser suficiente
+
+
+ALT 2: JERARQUÍA/PROFUNDIDAD EN TOKENS
+────────────────────────────────────────
+Cambio:  Tokens incluyen depth o padre
+Ejemplo: "View@depth=2|identificador"
+Impacto:
+  ✅ Captura estructura jerárquica
+  ✅ Distingue layouts profundos vs planos
+  ❌ Refactor más significativo
+Trade-off: Más información, complejidad media
+
+
+ALT 3: FALLBACK A CONTENIDO VISIBLE (MÁS PRAGMÁTICO)
+──────────────────────────────────────────────────────
+Cambio:  Si sin id/desc/texto, buscar en descendientes
+Ejemplo: Para nodo sin atributos, usar texto de hijos cercanos
+Impacto:
+  ✅ Captura lo que usuario VE (contenido visual)
+  ✅ Mejor discriminación entre pantallas
+  ✅ No necesita cambiar identificadores
+  ❌ Lógica más compleja, más recorridos del árbol
+Trade-off: Mejor discriminación, complejidad aumenta
+
+
+CONCLUSIÓN
+==========
+
+Problema Diagnosticado: A (Fixtures Repetidos)
+Secundarios Encontrados: B, C (multiplicidad e IDs faltantes)
+No Aplica: D (colapso de listas)
+
+Causa Raíz Subyacente: Wikipedia usa Compose con pocas IDs.
+  Resultado: Huellas débiles incluso con XML distintos.
+
+Acción Inmediata: Recapturar PASO 2 con pantallas REALMENTE distintas.
+Acción Mediano Plazo: Implementar Alternativa 1 o 3 para H1.
+

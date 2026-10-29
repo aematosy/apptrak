@@ -1,13 +1,13 @@
 {
   "app": {
-    "id": "org.wikipedia",
-    "version": "r/latest",
+    "id": "com.example.app",
+    "name": "Example App",
     "platform": "android"
   },
   "appium": {
     "url": "http://localhost:4723",
     "automationName": "UiAutomator2",
-    "deviceName": "Pixel_4_API_34"
+    "deviceName": "emulator-5554"
   },
   "precondition": {
     "type": "ya-iniciada"
@@ -18,18 +18,9 @@
   "limits": {
     "maxScreens": 100,
     "maxActions": 500,
-    "maxMinutes": 60
+    "maxMinutes": 90
   },
-  "exclusions": {
-    "byText": [
-      "cerrar sesion",
-      "close session",
-      "eliminar cuenta",
-      "delete account",
-      "cambiar contrasena",
-      "change password"
-    ]
-  },
+  "exclusions": {},
   "fingerprint": {
     "umbral": 0.85
   },
@@ -39,5 +30,8 @@
   },
   "output": {
     "dir": "exploraciones"
+  },
+  "reference": {
+    "fixtureTarget": 12
   }
 }

@@ -5,10 +5,7 @@ import { logger } from "./lib/logger.js";
 
 const program = new Command();
 
-program
-  .name("apptrak")
-  .description("Explorador autónomo de apps móviles")
-  .version("0.1.0");
+program.name("apptrak").description("Mobile App Exploration Toolkit").version("0.1.0");
 
 program
   .command("run")

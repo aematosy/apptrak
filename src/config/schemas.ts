@@ -6,16 +6,15 @@ import { z } from "zod";
  */
 export const ExplorationConfigSchema = z.object({
   app: z.object({
-    id: z.string().describe("Package name (Android) o bundle id (iOS)"),
+    id: z.string().min(1).describe("Package name (Android) o bundle id (iOS)"),
+    name: z.string().min(1).optional().describe("Nombre amigable del proyecto/app"),
     version: z.string().optional(),
     platform: z.enum(["android", "ios"]).default("android"),
   }),
 
   appium: z.object({
     url: z.string().url().default("http://localhost:4723"),
-    automationName: z
-      .enum(["UiAutomator2", "XCUITest"])
-      .default("UiAutomator2"),
+    automationName: z.enum(["UiAutomator2", "XCUITest"]).default("UiAutomator2"),
     deviceName: z.string().describe("AVD name o device serial"),
   }),
 
@@ -43,7 +42,7 @@ export const ExplorationConfigSchema = z.object({
               action: z.literal("wait"),
               milliseconds: z.number().positive(),
             }),
-          ])
+          ]),
         )
         .min(1),
     }),
@@ -80,6 +79,13 @@ export const ExplorationConfigSchema = z.object({
   output: z.object({
     dir: z.string().default("exploraciones"),
   }),
+
+  reference: z
+    .object({
+      fixtureTarget: z.number().int().positive().default(12),
+      fixturesDir: z.string().min(1).optional(),
+    })
+    .optional(),
 });
 
 export type ExplorationConfig = z.infer<typeof ExplorationConfigSchema>;
@@ -89,19 +95,15 @@ export type ExplorationConfig = z.infer<typeof ExplorationConfigSchema>;
  * Basado en SDD 5.2
  */
 export const TestDataSchema = z.object({
-  credentials: z
-    .record(z.string(), z.string().or(z.object({ env: z.string() })))
-    .optional(),
+  credentials: z.record(z.string(), z.string().or(z.object({ env: z.string() }))).optional(),
   fields: z.array(
     z.object({
       id: z.string(),
       value: z.string(),
       screen: z.string().optional(),
       label: z.string().optional(),
-      type: z
-        .enum(["text", "email", "phone", "date", "password"])
-        .optional(),
-    })
+      type: z.enum(["text", "email", "phone", "date", "password"]).optional(),
+    }),
   ),
 });
 

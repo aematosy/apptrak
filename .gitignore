@@ -6,3 +6,11 @@ exploraciones/
 .env
 .env.local
 .DS_Store
+
+# Local / temporary fixture datasets
+test/fixtures/arboles/io-app-redo/
+test/fixtures/arboles/wikipedia-backup-invalido/
+
+# Local project configuration
+exploracion.json
+exploracion.local.backup.json

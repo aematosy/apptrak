@@ -7,14 +7,14 @@
     "rules": {
       "recommended": true,
       "style": {
-        "noImplicitBooleanConversion": "error"
+        "noImplicitBoolean": "error"
       }
     }
   },
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
-    "indentSize": 2,
+    "indentWidth": 2,
     "lineWidth": 100
   }
 }

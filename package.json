@@ -15,7 +15,9 @@
     "test-watch": "vitest",
     "capturar": "tsx scripts/capturar-arbol.ts",
     "capturar-secuencia": "tsx scripts/capturar-secuencia.ts",
-    "analizar-arboles": "tsx scripts/analizar-arboles.ts"
+    "analizar-arboles": "tsx scripts/analizar-arboles.ts",
+    "apptrak": "tsx src/cli/menu.ts",
+    "apptrak-build": "tsup src/cli/menu.ts --format esm --clean --outDir dist-cli"
   },
   "keywords": [],
   "author": "",
