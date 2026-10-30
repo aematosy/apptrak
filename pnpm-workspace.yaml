@@ -1,0 +1,5 @@
+allowBuilds:
+  '@biomejs/biome': true
+  edgedriver: false
+  esbuild: true
+  geckodriver: false

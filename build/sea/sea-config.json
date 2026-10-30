@@ -1,0 +1,7 @@
+{
+  "main": "dist-sea/apptrak.cjs",
+  "output": "dist-sea/sea-prep.blob",
+  "disableExperimentalSEAWarning": true,
+  "useSnapshot": false,
+  "useCodeCache": false
+}

@@ -1,19 +1,16 @@
-import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "node:fs";
-import { normalizarPageSource } from "../src/normalizador/index.js";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   calcularLocators,
   calcularLocatorsArbol,
   estadisticasCalidad,
 } from "../src/calidad/index.js";
+import { normalizarPageSource } from "../src/normalizador/index.js";
 
 let wikipediaXML: string;
 
 beforeAll(() => {
-  wikipediaXML = readFileSync(
-    "test/fixtures/arboles/wikipedia-inicio.xml",
-    "utf-8"
-  );
+  wikipediaXML = readFileSync("test/fixtures/arboles/wikipedia-inicio.xml", "utf-8");
 });
 
 describe("Calidad de Locators (PASO 5)", () => {
@@ -85,9 +82,7 @@ describe("Calidad de Locators (PASO 5)", () => {
 
     it("usa content-desc si no hay ID", () => {
       const arbol = normalizarPageSource(wikipediaXML);
-      const nodoConDesc = arbol.nodos.find(
-        (n) => n.descripcion && !n.idEstable
-      );
+      const nodoConDesc = arbol.nodos.find((n) => n.descripcion && !n.idEstable);
 
       if (nodoConDesc) {
         const localizador = calcularLocators(nodoConDesc, arbol);
@@ -102,18 +97,23 @@ describe("Calidad de Locators (PASO 5)", () => {
       }
     });
 
-    it("fallback a xpath y clase+índice", () => {
+    it("genera xpath estructural sin índices posicionales", () => {
       const arbol = normalizarPageSource(wikipediaXML);
 
       for (const nodo of arbol.nodos.slice(0, 3)) {
         const localizador = calcularLocators(nodo, arbol);
 
-        // Siempre debe haber al menos xpath y clase+índice
-        const tipos = [localizador.principal, ...localizador.alternativas].map(
-          (l) => l.tipo
-        );
+        // Debe generar al menos un XPath estructural sin índices posicionales
+        const tipos = [localizador.principal, ...localizador.alternativas].map((l) => l.tipo);
         expect(tipos).toContain("xpath");
-        expect(tipos).toContain("clase");
+
+        const todosLosLocators = [localizador.principal, ...localizador.alternativas];
+
+        const usaIndicePosicional = todosLosLocators.some((locator) =>
+          /\[\d+\]/.test(locator.valor),
+        );
+
+        expect(usaIndicePosicional).toBe(false);
       }
     });
   });
@@ -142,9 +142,7 @@ describe("Calidad de Locators (PASO 5)", () => {
 
       for (const [indice, localizador] of locatorsMap.entries()) {
         expect(localizador.principal).toBeDefined();
-        expect(localizador.principal.calidad).toMatch(
-          /estable|media|ancla|fragil/
-        );
+        expect(localizador.principal.calidad).toMatch(/estable|media|ancla|fragil/);
       }
     });
 
@@ -164,15 +162,13 @@ describe("Calidad de Locators (PASO 5)", () => {
         stats.conLocatorEstable +
           stats.conLocatorMedia +
           stats.conLocatorAncla +
-          stats.conLocatorFragil
+          stats.conLocatorFragil,
       ).toBe(stats.totalNodos);
 
       // Porcentajes válidos
       expect(stats.porcentajeEstable).toBeGreaterThanOrEqual(0);
       expect(stats.porcentajeEstable).toBeLessThanOrEqual(100);
-      expect(stats.porcentajeEstableOMedia).toBeGreaterThanOrEqual(
-        stats.porcentajeEstable
-      );
+      expect(stats.porcentajeEstableOMedia).toBeGreaterThanOrEqual(stats.porcentajeEstable);
     });
   });
 
@@ -184,13 +180,13 @@ describe("Calidad de Locators (PASO 5)", () => {
 
       console.log("\n📊 Calidad de Locators (Wikipedia Onboarding):");
       console.log(`   Total nodos: ${stats.totalNodos}`);
-      console.log(`   Estable: ${stats.conLocatorEstable} (${stats.porcentajeEstable.toFixed(1)}%)`);
+      console.log(
+        `   Estable: ${stats.conLocatorEstable} (${stats.porcentajeEstable.toFixed(1)}%)`,
+      );
       console.log(`   Media: ${stats.conLocatorMedia}`);
       console.log(`   Ancla: ${stats.conLocatorAncla}`);
       console.log(`   Frágil: ${stats.conLocatorFragil}`);
-      console.log(
-        `   Estable + Media: ${stats.porcentajeEstableOMedia.toFixed(1)}%\n`
-      );
+      console.log(`   Estable + Media: ${stats.porcentajeEstableOMedia.toFixed(1)}%\n`);
 
       // Meta E0: >= algunos locators estables
       expect(stats.conLocatorEstable).toBeGreaterThanOrEqual(0);
@@ -198,16 +194,12 @@ describe("Calidad de Locators (PASO 5)", () => {
 
     it("muestra ejemplo de locators para botón Forward", () => {
       const arbol = normalizarPageSource(wikipediaXML);
-      const nodoForward = arbol.nodos.find((n) =>
-        n.descripcion?.includes("Forward")
-      );
+      const nodoForward = arbol.nodos.find((n) => n.descripcion?.includes("Forward"));
 
       if (nodoForward) {
         const localizador = calcularLocators(nodoForward, arbol);
 
-        console.log(
-          "\n📍 Locators para botón 'Forward':"
-        );
+        console.log("\n📍 Locators para botón 'Forward':");
         console.log(`   Principal: ${localizador.principal.valor}`);
         console.log(`     Tipo: ${localizador.principal.tipo}`);
         console.log(`     Calidad: ${localizador.principal.calidad}`);
@@ -215,11 +207,9 @@ describe("Calidad de Locators (PASO 5)", () => {
 
         if (localizador.alternativas.length > 0) {
           console.log("   Alternativas:");
-          localizador.alternativas.slice(0, 2).forEach((alt) => {
-            console.log(
-              `     - ${alt.valor} (${alt.tipo}, ${alt.calidad})`
-            );
-          });
+          for (const alt of localizador.alternativas.slice(0, 2)) {
+            console.log(`     - ${alt.valor} (${alt.tipo}, ${alt.calidad})`);
+          }
         }
         console.log();
 

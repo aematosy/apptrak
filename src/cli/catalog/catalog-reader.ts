@@ -21,6 +21,7 @@ export interface CatalogElement {
     checkable?: boolean;
   };
   locator?: {
+    titulo?: string;
     principal?: CatalogLocator;
     alternativas?: CatalogLocator[];
   } | null;
@@ -109,12 +110,14 @@ export function getUniqueScreens(catalog: AppCatalog): CatalogScreen[] {
 
 export function getElementName(element: CatalogElement): string {
   const node = element.nodo;
-  const principal = element.locator?.principal;
+  const locator = element.locator;
+  const principal = locator?.principal;
 
   return (
+    locator?.titulo?.trim() ||
+    node?.idEstable?.trim() ||
     node?.descripcion?.trim() ||
     node?.texto?.trim() ||
-    node?.idEstable?.trim() ||
     principal?.valor?.trim() ||
     `Elemento ${element.indice ?? "?"}`
   );
