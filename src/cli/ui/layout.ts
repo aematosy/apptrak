@@ -162,5 +162,5 @@ export function renderMenuOptions(): string {
 }
 
 export function renderMenu(state: StateInfo): string {
-  return [renderLogo(), renderHeader(), renderDashboard(state), renderMenuOptions(), ""].join("");
+  return ["\n", renderLogo(), renderHeader(), renderDashboard(state), renderMenuOptions(), ""].join("");
 }

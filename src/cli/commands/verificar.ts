@@ -241,13 +241,13 @@ export async function cmdVerificar() {
   const todoOk = Object.values(checks).every((check) => check.ok);
 
   if (todoOk) {
-    console.log("\n✅ LISTO PARA CAPTURAR\n");
+    console.log(`\n${estado(true)} LISTO PARA CAPTURAR\n`);
   } else {
     const faltantes = Object.entries(checks)
       .filter(([, check]) => !check.ok)
       .map(([name]) => name);
 
-    console.log(`\n❌ NO LISTO\n   Faltantes: ${faltantes.join(", ")}\n`);
+    console.log(`\n${estado(false)} NO LISTO\n   Faltantes: ${faltantes.join(", ")}\n`);
   }
 
   return {
