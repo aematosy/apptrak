@@ -1,13 +1,10 @@
 import { createHash } from "node:crypto";
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { createInterface, emitKeypressEvents } from "node:readline";
 import { remote } from "webdriverio";
 import { calcularLocatorsArbol, estadisticasCalidad } from "../src/calidad/index.js";
+import { submenuInfo, submenuOption, submenuSection, submenuTitle } from "../src/cli/ui/submenu.js";
+import { FlowSession } from "../src/flow/session.js";
 import { calcularHuella } from "../src/huella/tokens.js";
 import { normalizarPageSource } from "../src/normalizador/index.js";
 
@@ -230,11 +227,7 @@ async function capturar(nombre: string): Promise<void> {
   const jsonExistente = `${fixturesDir}/${limpio}.json`;
   const catalogoExistente = `${fixturesDir}/${limpio}.catalog.json`;
 
-  if (
-    existsSync(xmlExistente) ||
-    existsSync(jsonExistente) ||
-    existsSync(catalogoExistente)
-  ) {
+  if (existsSync(xmlExistente) || existsSync(jsonExistente) || existsSync(catalogoExistente)) {
     console.log(`\n⚠️ El estado "${limpio}" ya existe.`);
     console.log("   Usa otro nombre para evitar sobrescribir evidencia.\n");
     return;
@@ -546,45 +539,213 @@ async function confirmarSalida(): Promise<boolean> {
 }
 
 function mostrarMenu(): void {
-  console.log(`
-APPTRAK · CAPTURA DE FIXTURES
-────────────────────────────────────────────────────────────
+  console.log(submenuTitle("CAPTURE SESSION"));
 
-Proyecto             ${projectName}
-Dispositivo          ${deviceName}
-Package              ${appPackage}
-Objetivo referencia  ${fixtureTarget}
-Capturas sesión      ${capturasRegistro.length}
-Salida                ${fixturesDir}
+  console.log(submenuSection("SESSION"));
+  console.log(submenuInfo("Proyecto", projectName));
+  console.log(submenuInfo("Dispositivo", deviceName));
+  console.log(submenuInfo("Package", appPackage));
+  console.log(submenuInfo("Capturas", `${capturasRegistro.length} / ${fixtureTarget}`));
+  console.log(submenuInfo("Salida", fixturesDir));
 
-────────────────────────────────────────────────────────────
+  console.log();
+  console.log(submenuSection("CAPTURE"));
+  console.log(submenuOption("1", "Capturar pantalla actual"));
+  console.log(submenuOption("2", "Capturar con nombre"));
+  console.log(submenuOption("3", "Ver estado de captura"));
 
-  1  Capturar pantalla actual
-  2  Capturar con nombre personalizado
-  3  Ver estado de captura
-  4  Navegación / acciones
-  5  Pausar
+  console.log();
+  console.log(submenuSection("FLOW"));
+  console.log(submenuOption("4", "Grabar flow"));
+  console.log(submenuOption("5", "Ver flows grabados"));
 
-  0  Terminar captura
+  console.log();
+  console.log(submenuSection("TOOLS"));
+  console.log(submenuOption("6", "Navegación / acciones"));
+  console.log(submenuOption("7", "Pausar"));
 
-ESC  Volver / salir con confirmación
-`);
+  console.log();
+  console.log(submenuOption("0", "Terminar sesión"));
+  console.log();
+}
+
+async function grabarFlow(): Promise<void> {
+  if (!driver) {
+    console.log("\n❌ No existe una sesión Appium activa.\n");
+    return;
+  }
+
+  if (!deviceName) {
+    console.log("\n❌ No se encontró el identificador del dispositivo.\n");
+    return;
+  }
+
+  const nombre = (await pregunta("Nombre del flow › ")).trim();
+
+  if (!nombre) {
+    console.log("\n❌ El nombre no puede estar vacío.\n");
+    return;
+  }
+
+  const livePlatform: LivePlatform = platform.toLowerCase() === "ios" ? "ios" : "android";
+
+  const session = new FlowSession({
+    name: nombre,
+    project: projectName,
+    appId: appPackage,
+    platform,
+  });
+
+  const snapshotProvider = new AppiumSnapshotProvider(driver);
+
+  const recorder = new LiveRecorder({
+    snapshotProvider,
+    stabilizationMs: 500,
+  });
+
+  const interactionSource = createInteractionSource({
+    platform: livePlatform,
+    deviceId: deviceName,
+  });
+
+  console.log(submenuTitle("LIVE RECORDER"));
+
+  console.log(submenuSection("FLOW"));
+  console.log(submenuInfo("Nombre", nombre));
+  console.log(submenuInfo("Platform", livePlatform));
+  console.log(submenuInfo("Device", deviceName));
+
+  console.log();
+  console.log(submenuSection("LIVE"));
+  console.log("  Usa la aplicación normalmente en el dispositivo.");
+  console.log("  Apptrak detectará las interacciones automáticamente.");
+  console.log();
+
+  await recorder.start();
+
+  let processing: Promise<void> = Promise.resolve();
+
+  await interactionSource.start((interaction) => {
+    processing = processing
+      .then(async () => {
+        const entry = await recorder.processInteraction(interaction);
+
+        const event = entry.event;
+
+        if (!event) {
+          return;
+        }
+
+        if (event.type === "tap") {
+          const locator = event.element.locator;
+
+          console.log(`  TAP      ${event.element.title}`);
+
+          if (locator) {
+            const quality = locator.quality ?? "sin calidad";
+
+            const unique = locator.unique ? "unique" : "non-unique";
+
+            console.log(`           ${locator.type} · ${quality} · ${unique}`);
+          }
+
+          session.addStep({
+            type: "tap",
+            element: event.element.title,
+            locator,
+          });
+        }
+
+        if (event.type === "scroll") {
+          console.log(`  SCROLL   ${event.direction}`);
+
+          session.addStep({
+            type: "scroll",
+            value: event.direction,
+          });
+        }
+
+        if (event.type === "back") {
+          console.log("  BACK");
+
+          session.addStep({
+            type: "back",
+          });
+        }
+
+        if (event.type === "write") {
+          const storedValue = event.sensitive ? "${sensitiveValue}" : event.value;
+
+          console.log(`  WRITE    ${event.element.title}${event.sensitive ? " · sensitive" : ""}`);
+
+          session.addStep({
+            type: "write",
+            element: event.element.title,
+            locator: event.element.locator,
+            value: storedValue,
+            sensitive: event.sensitive,
+          });
+        }
+
+        const beforeFingerprint = entry.before.screen.fingerprint;
+
+        const afterFingerprint = entry.after.screen.fingerprint;
+
+        if (beforeFingerprint && afterFingerprint && beforeFingerprint !== afterFingerprint) {
+          console.log(`  SCREEN   ${beforeFingerprint} → ${afterFingerprint}`);
+        }
+
+        for (const assertion of entry.assertions) {
+          if (assertion.type === "text-visible") {
+            console.log(`  NEW UI   ${assertion.value}`);
+          }
+        }
+
+        console.log();
+      })
+      .catch((error) => {
+        console.error("\n❌ Error procesando interacción LIVE:", error);
+      });
+
+    return processing;
+  });
+
+  console.log(submenuInfo("Estado", "● RECORDING"));
+
+  console.log();
+  console.log("  Presiona ENTER en esta terminal para finalizar el flow.");
+  console.log();
+
+  await pregunta("");
+
+  await interactionSource.stop();
+  await processing;
+
+  recorder.stop();
+  session.finish();
+
+  const outputDir = fixturesDir ? `${fixturesDir}/flows` : "flows";
+
+  const savedPath = session.save(outputDir);
+
+  console.log();
+  console.log(`✓ Flow guardado: ${savedPath}`);
+  console.log(`✓ Pasos registrados: ${session.getSteps().length}`);
+  console.log();
 }
 
 async function menuNavegacion(): Promise<void> {
   while (true) {
-    console.log(`
-NAVEGACIÓN / ACCIONES
-────────────────────────────────────────
+    console.log(submenuTitle("NAVIGATION"));
 
-  1  Tap por texto
-  2  Escribir texto
-  3  Volver atrás
+    console.log(submenuSection("ACTIONS"));
+    console.log(submenuOption("1", "Tap por texto"));
+    console.log(submenuOption("2", "Escribir texto"));
+    console.log(submenuOption("3", "Volver atrás"));
 
-  0  Volver
-
-ESC  Volver
-`);
+    console.log();
+    console.log(submenuOption("0", "Volver"));
+    console.log();
 
     const opcion = (await pregunta("Selecciona una opción › ")).trim();
 
@@ -686,11 +847,21 @@ async function main(): Promise<void> {
     }
 
     if (opcion === "4") {
-      await menuNavegacion();
+      await grabarFlow();
       continue;
     }
 
     if (opcion === "5") {
+      console.log("\n🚧 Visor de flows listo para integrar.\n");
+      continue;
+    }
+
+    if (opcion === "6") {
+      await menuNavegacion();
+      continue;
+    }
+
+    if (opcion === "7") {
       const raw = (await pregunta("Pausa en milisegundos [1000] › ")).trim();
 
       const milliseconds = Number.parseInt(raw || "1000", 10) || 1000;

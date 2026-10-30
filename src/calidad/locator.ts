@@ -1,245 +1,85 @@
 /**
- * PASO 5: Calidad de locators
- * Basado en SDD 10.3: Estrategias, verificación de unicidad, criterios de calidad
+ * Fachada legacy de calidad de locators.
  *
- * Niveles de calidad (4): estable, media, ancla, frágil
- * Estrategia: preferencia en orden
+ * Mantiene compatibilidad con la API existente:
+ * - calcularLocators
+ * - calcularLocatorsArbol
+ * - estadisticasCalidad
+ *
+ * Internamente delega al Locator Engine v2.
  */
 
-import type { NodoNormalizado, ArbolNormalizado } from "../normalizador/tipos.js";
+import type { ArbolNormalizado, NodoNormalizado } from "../normalizador/tipos.js";
+import { calcularLocatorV2, calcularLocatorsArbolV2 } from "./locator/engine.js";
+import type { LocatorCandidate } from "./locator/types.js";
 
 export type CalidadLocator = "estable" | "media" | "ancla" | "fragil";
 
 export interface Locator {
-  valor: string; // id, xpath, clase, etc.
+  valor: string;
   tipo: "id" | "xpath" | "texto" | "clase" | "indice" | "accessibility-id";
   calidad: CalidadLocator;
-  unico: boolean; // ¿es único en la pantalla?
-  confianza: number; // 0.0-1.0
+  unico: boolean;
+  confianza: number;
+
+  estrategia?: string;
+  score?: number;
+  dinamico?: boolean;
+  motivo?: string;
 }
 
 export interface LocalizadorElemento {
-  principal: Locator; // mejor locator
-  alternativas: Locator[]; // otros válidos, ordenados por calidad
-  descripcion: string; // descripción del elemento (para debug)
+  titulo?: string;
+  principal: Locator;
+  alternativas: Locator[];
+  descripcion: string;
 }
 
-/**
- * Estrategias de locators en orden de preferencia (SDD 10.3)
- * 1. resource-id exacto (estable)
- * 2. Accesibilidad ID (estable)
- * 3. XPath con estructura (media)
- * 4. Descripción/content-desc (ancla)
- * 5. Clase + índice (frágil)
- */
-
-/**
- * Genera locator por resource-id: máxima prioridad si es único
- */
-function generarLocatorId(
-  nodo: NodoNormalizado,
-  arbol: ArbolNormalizado
-): Locator | null {
-  if (!nodo.idEstable) return null;
-
-  // Verificar unicidad en la pantalla
-  const otrosConId = arbol.nodos.filter(
-    (n) => n.idEstable === nodo.idEstable && n.indice !== nodo.indice
-  );
-
-  const unico = otrosConId.length === 0;
-  const confianza = unico ? 1.0 : 0.5; // si hay duplicados, menos confianza
-
+function adaptarLocator(candidate: LocatorCandidate): Locator {
   return {
-    valor: nodo.idEstable,
-    tipo: "id",
-    calidad: "estable",
-    unico,
-    confianza,
+    valor: candidate.valor,
+    tipo: candidate.tipo,
+    calidad: candidate.calidad,
+    unico: candidate.unico,
+    confianza: candidate.confianza,
+    estrategia: candidate.estrategia,
+    score: candidate.score,
+    dinamico: candidate.dinamico,
+    motivo: candidate.motivo,
   };
 }
 
-/**
- * Genera locator por accessibility-id/content-desc
- */
-function generarLocatorAccesibilidad(
-  nodo: NodoNormalizado,
-  arbol: ArbolNormalizado
-): Locator | null {
-  if (!nodo.descripcion) return null;
-
-  const otrosConDesc = arbol.nodos.filter(
-    (n) => n.descripcion === nodo.descripcion && n.indice !== nodo.indice
-  );
-
-  const unico = otrosConDesc.length === 0;
-  const confianza = unico ? 0.95 : 0.6;
-
-  return {
-    valor: nodo.descripcion,
-    tipo: "accessibility-id",
-    calidad: unico ? "estable" : "media",
-    unico,
-    confianza,
-  };
-}
-
-/**
- * Genera xpath basado en estructura (clase + posición en hermanos)
- */
-function generarLocatorXPath(
-  nodo: NodoNormalizado,
-  arbol: ArbolNormalizado
-): Locator {
-  // XPath simple: //<clase>[posición]
-  const hermanos = arbol.nodos.filter((n) => n.padre === nodo.padre);
-  const posicionEnHermanos = hermanos.findIndex((h) => h.indice === nodo.indice) + 1;
-
-  // Simplificar clase: solo el último componente
-  const claseCorta = nodo.clase.split(".").pop() || nodo.clase;
-
-  // XPath muy simplificado (en realidad sería más complejo)
-  const xpath = `//${claseCorta}[${posicionEnHermanos}]`;
-
-  // Verificar si es único
-  const otrosConXpath = arbol.nodos.filter(
-    (n) =>
-      n.clase === nodo.clase &&
-      arbol.nodos.filter((h) => h.padre === n.padre && h.clase === nodo.clase)
-        .length === hermanos.length &&
-      n.indice !== nodo.indice
-  );
-
-  const unico = otrosConXpath.length === 0;
-  const confianza = unico ? 0.8 : 0.4; // xpath es más frágil
-
-  return {
-    valor: xpath,
-    tipo: "xpath",
-    calidad: unico ? "media" : "fragil",
-    unico,
-    confianza,
-  };
-}
-
-/**
- * Genera locator por texto visible
- */
-function generarLocatorTexto(
-  nodo: NodoNormalizado,
-  arbol: ArbolNormalizado
-): Locator | null {
-  if (!nodo.texto || nodo.texto.length === 0) return null;
-
-  const otrosConTexto = arbol.nodos.filter(
-    (n) => n.texto === nodo.texto && n.indice !== nodo.indice
-  );
-
-  const unico = otrosConTexto.length === 0;
-  const confianza = unico ? 0.7 : 0.3; // texto es muy variable
-
-  return {
-    valor: nodo.texto,
-    tipo: "texto",
-    calidad: unico ? "ancla" : "fragil",
-    unico,
-    confianza,
-  };
-}
-
-/**
- * Genera locator por clase + índice
- */
-function generarLocatorClaseIndice(
-  nodo: NodoNormalizado,
-  arbol: ArbolNormalizado
-): Locator {
-  const claseCorta = nodo.clase.split(".").pop() || nodo.clase;
-  const hermanos = arbol.nodos.filter((n) => n.padre === nodo.padre && n.clase === nodo.clase);
-  const indice = hermanos.findIndex((h) => h.indice === nodo.indice) + 1;
-
-  const valor = `${claseCorta}[${indice}]`;
-  const unico = hermanos.length === 1;
-  const confianza = unico ? 0.5 : 0.2; // muy frágil
-
-  return {
-    valor,
-    tipo: "clase",
-    calidad: "fragil",
-    unico,
-    confianza,
-  };
-}
-
-/**
- * Calcula todos los locators de un nodo, ordenados por calidad
- */
 export function calcularLocators(
   nodo: NodoNormalizado,
-  arbol: ArbolNormalizado
+  arbol: ArbolNormalizado,
 ): LocalizadorElemento {
-  const locators: Locator[] = [];
-
-  // 1. ID (estable)
-  const locId = generarLocatorId(nodo, arbol);
-  if (locId) locators.push(locId);
-
-  // 2. Accesibilidad ID (estable)
-  const locAcces = generarLocatorAccesibilidad(nodo, arbol);
-  if (locAcces) locators.push(locAcces);
-
-  // 3. XPath (media-frágil)
-  const locXPath = generarLocatorXPath(nodo, arbol);
-  locators.push(locXPath);
-
-  // 4. Texto (ancla-frágil)
-  const locTexto = generarLocatorTexto(nodo, arbol);
-  if (locTexto) locators.push(locTexto);
-
-  // 5. Clase + índice (frágil)
-  const locClaseIndice = generarLocatorClaseIndice(nodo, arbol);
-  locators.push(locClaseIndice);
-
-  // Ordenar por calidad y confianza
-  const ordenCalidad = { estable: 4, media: 3, ancla: 2, fragil: 1 };
-  locators.sort((a, b) => {
-    const cmpCalidad =
-      (ordenCalidad[b.calidad] || 0) - (ordenCalidad[a.calidad] || 0);
-    if (cmpCalidad !== 0) return cmpCalidad;
-    return b.confianza - a.confianza;
-  });
-
-  const principal = locators[0] || locClaseIndice;
-  const alternativas = locators.slice(1);
-
-  const descripcion =
-    nodo.descripcion || nodo.texto || `${nodo.clase} (índice ${nodo.indice})`;
+  const resultado = calcularLocatorV2(nodo, arbol);
 
   return {
-    principal,
-    alternativas,
-    descripcion,
+    titulo: resultado.titulo,
+    principal: adaptarLocator(resultado.principal),
+    alternativas: resultado.alternativas.map(adaptarLocator),
+    descripcion: resultado.descripcion,
   };
 }
 
-/**
- * Calcula locators para todos los nodos de una pantalla
- */
-export function calcularLocatorsArbol(
-  arbol: ArbolNormalizado
-): Map<number, LocalizadorElemento> {
+export function calcularLocatorsArbol(arbol: ArbolNormalizado): Map<number, LocalizadorElemento> {
+  const v2 = calcularLocatorsArbolV2(arbol);
+
   const result = new Map<number, LocalizadorElemento>();
 
-  for (const nodo of arbol.nodos) {
-    result.set(nodo.indice, calcularLocators(nodo, arbol));
+  for (const [index, locator] of v2) {
+    result.set(index, {
+      titulo: locator.titulo,
+      principal: adaptarLocator(locator.principal),
+      alternativas: locator.alternativas.map(adaptarLocator),
+      descripcion: locator.descripcion,
+    });
   }
 
   return result;
 }
 
-/**
- * Estadísticas de calidad de una pantalla
- */
 export interface EstadisticasCalidad {
   totalNodos: number;
   conLocatorEstable: number;
@@ -251,29 +91,45 @@ export interface EstadisticasCalidad {
 }
 
 export function estadisticasCalidad(
-  locators: Map<number, LocalizadorElemento>
+  locators: Map<number, LocalizadorElemento>,
 ): EstadisticasCalidad {
   const totalNodos = locators.size;
-  let estable = 0,
-    media = 0,
-    ancla = 0,
-    fragil = 0;
 
-  for (const loc of locators.values()) {
-    switch (loc.principal.calidad) {
+  let estable = 0;
+  let media = 0;
+  let ancla = 0;
+  let fragil = 0;
+
+  for (const locator of locators.values()) {
+    switch (locator.principal.calidad) {
       case "estable":
         estable++;
         break;
+
       case "media":
         media++;
         break;
+
       case "ancla":
         ancla++;
         break;
+
       case "fragil":
         fragil++;
         break;
     }
+  }
+
+  if (totalNodos === 0) {
+    return {
+      totalNodos: 0,
+      conLocatorEstable: 0,
+      conLocatorMedia: 0,
+      conLocatorAncla: 0,
+      conLocatorFragil: 0,
+      porcentajeEstable: 0,
+      porcentajeEstableOMedia: 0,
+    };
   }
 
   return {

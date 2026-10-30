@@ -14,3 +14,10 @@ test/fixtures/arboles/wikipedia-backup-invalido/
 # Local project configuration
 exploracion.json
 exploracion.local.backup.json
+
+# SEA build output
+dist-sea/
+
+# Local LIVE diagnostics
+scripts/probar-live-input.ts
+scripts/probar-touch-parser.ts
