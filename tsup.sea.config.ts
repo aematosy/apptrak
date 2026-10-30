@@ -1,4 +1,12 @@
+import { readFileSync } from "node:fs";
 import { defineConfig } from "tsup";
+
+const packageJson = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf-8"),
+);
+
+const apptrakVersion =
+  process.env.APPTRAK_VERSION?.replace(/^v/, "") ?? packageJson.version;
 
 export default defineConfig({
   entry: {
@@ -15,10 +23,10 @@ export default defineConfig({
   minify: true,
   clean: true,
 
-  /*
-   * Para SEA no podemos dejar dependencias npm externas.
-   * Todo debe quedar dentro de apptrak.cjs.
-   */
+  define: {
+    __APPTRAK_VERSION__: JSON.stringify(apptrakVersion),
+  },
+
   noExternal: [
     "zod",
     "commander",
@@ -26,7 +34,7 @@ export default defineConfig({
     "pino",
     "pino-pretty",
     "webdriverio",
-    "@appium/types"
+    "@appium/types",
   ],
 
   outDir: "dist-sea",
